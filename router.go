@@ -1,10 +1,8 @@
 package authrouter
 
 import (
-	"fmt"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -30,20 +28,30 @@ func (l defaultLogger) Error(err error, a ...interface{}) {
 }
 
 type Router struct {
-	HttpRouter *httprouter.Router
-	Authenticator
-	Logger
+	httpRouter    *httprouter.Router
+	authenticator Authenticator
+	logger        Logger
 }
 
-func New(authenticator Authenticator, logger Logger) *Router {
+type Config struct {
+	Routes              []Route
+	AuthenticatedRoutes []Route
+	AuthorizedRoutes    []Route
+	EnableCors          bool
+}
+
+func New(authenticator Authenticator, logger Logger, config Config) *Router {
 	if logger == nil {
 		logger = defaultLogger{}
 	}
-	return &Router{
-		HttpRouter:    httprouter.New(),
-		Authenticator: authenticator,
-		Logger:        logger,
+	router := &Router{
+		httpRouter:    httprouter.New(),
+		authenticator: authenticator,
+		logger:        logger,
 	}
+	router.buildRoutes(config)
+
+	return router
 }
 
 type Route struct {
@@ -54,19 +62,12 @@ type Route struct {
 	Capability string
 }
 
-type Config struct {
-	Routes              []Route
-	AuthenticatedRoutes []Route
-	AuthorizedRoutes    []Route
-	EnableCors          bool
-}
-
-func (router *Router) BuildRoutes(config Config) {
+func (router *Router) buildRoutes(config Config) {
 	endpointMethods := map[string][]string{}
 
 	for _, route := range config.Routes {
 		endpointMethods[route.Path] = append(endpointMethods[route.Path], route.Method)
-		router.HttpRouter.Handle(
+		router.httpRouter.Handle(
 			route.Method,
 			route.Path,
 			router.middleware(router.handle(route.Handler)),
@@ -75,7 +76,7 @@ func (router *Router) BuildRoutes(config Config) {
 
 	for _, route := range config.AuthenticatedRoutes {
 		endpointMethods[route.Path] = append(endpointMethods[route.Path], route.Method)
-		router.HttpRouter.Handle(
+		router.httpRouter.Handle(
 			route.Method,
 			route.Path,
 			router.middleware(router.handleWithAuthentication(route.Handler)),
@@ -84,7 +85,7 @@ func (router *Router) BuildRoutes(config Config) {
 
 	for _, route := range config.AuthorizedRoutes {
 		endpointMethods[route.Path] = append(endpointMethods[route.Path], route.Method)
-		router.HttpRouter.Handle(
+		router.httpRouter.Handle(
 			route.Method,
 			route.Path,
 			router.middleware(router.handleWithAuthorization(
@@ -97,18 +98,7 @@ func (router *Router) BuildRoutes(config Config) {
 
 	if config.EnableCors {
 		for path, methods := range endpointMethods {
-			router.HttpRouter.OPTIONS(path, constructOptions(methods))
+			router.httpRouter.OPTIONS(path, constructOptions(methods))
 		}
-	}
-}
-
-func constructOptions(methods []string) func(http.ResponseWriter, *http.Request, httprouter.Params) {
-	methodCsv := strings.Join(append(methods, http.MethodOptions), ",")
-	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", methodCsv)
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, "{}")
 	}
 }

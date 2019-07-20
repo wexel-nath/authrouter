@@ -17,7 +17,7 @@ func (router *Router) handle(handler Handler) httprouter.Handle {
 
 func (router *Router) handleWithAuthentication(handler Handler) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		user, err := router.Authenticator.Authenticate(r)
+		user, err := router.authenticator.Authenticate(r)
 		if err != nil {
 			notAuthenticatedResponse(w, err)
 			return
@@ -34,7 +34,7 @@ func (router *Router) handleWithAuthorization(
 	capability string,
 ) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		user, err := router.Authenticator.Authorize(r, service, capability)
+		user, err := router.authenticator.Authorize(r, service, capability)
 		if err != nil {
 			notAuthenticatedResponse(w, err)
 			return
