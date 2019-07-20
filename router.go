@@ -2,15 +2,9 @@ package authrouter
 
 import (
 	"log"
-	"net/http"
 
 	"github.com/julienschmidt/httprouter"
 )
-
-type Authenticator interface {
-	Authenticate(r *http.Request) (user interface{}, err error)
-	Authorize(r *http.Request, service string, capability string) (user interface{}, err error)
-}
 
 type Logger interface {
 	Info(format string, a ...interface{})
@@ -29,7 +23,7 @@ func (l defaultLogger) Error(err error, a ...interface{}) {
 
 type Router struct {
 	httpRouter    *httprouter.Router
-	authenticator Authenticator
+	authenticator *Authenticator
 	logger        Logger
 }
 
@@ -40,7 +34,7 @@ type Config struct {
 	EnableCors          bool
 }
 
-func New(authenticator Authenticator, logger Logger, config Config) *Router {
+func New(authenticator *Authenticator, logger Logger, config Config) *Router {
 	if logger == nil {
 		logger = defaultLogger{}
 	}
