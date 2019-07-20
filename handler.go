@@ -6,11 +6,11 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-type Handler func(r *http.Request, user interface{}) (data interface{}, meta interface{}, status int)
+type Handler func(r *http.Request, user User) (data interface{}, meta interface{}, status int)
 
 func (router *Router) handle(handler Handler) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		data, meta, status := handler(r, nil)
+		data, meta, status := handler(r, User{})
 		jsonResponse(w, data, meta, status)
 	}
 }
