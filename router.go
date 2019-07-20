@@ -2,6 +2,7 @@ package authrouter
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -13,15 +14,35 @@ type Authenticator interface {
 	Authorize(r *http.Request, service string, capability string) (user interface{}, err error)
 }
 
-type Router struct {
-	HttpRouter    *httprouter.Router
-	Authenticator Authenticator
+type Logger interface {
+	Info(format string, a ...interface{})
+	Error(err error, a ...interface{})
 }
 
-func New(authenticator Authenticator) *Router {
+type defaultLogger struct {}
+
+func (l defaultLogger) Info(format string, a ...interface{}) {
+	// do nothing
+}
+
+func (l defaultLogger) Error(err error, a ...interface{}) {
+	log.Println(err, a)
+}
+
+type Router struct {
+	HttpRouter *httprouter.Router
+	Authenticator
+	Logger
+}
+
+func New(authenticator Authenticator, logger Logger) *Router {
+	if logger == nil {
+		logger = defaultLogger{}
+	}
 	return &Router{
 		HttpRouter:    httprouter.New(),
 		Authenticator: authenticator,
+		Logger:        logger,
 	}
 }
 
@@ -38,26 +59,17 @@ type Config struct {
 	AuthenticatedRoutes []Route
 	AuthorizedRoutes    []Route
 	EnableCors          bool
-	Middleware          func(next httprouter.Handle) httprouter.Handle
-}
-
-func defaultMiddleware(next httprouter.Handle) httprouter.Handle {
-	return next
 }
 
 func (router *Router) BuildRoutes(config Config) {
 	endpointMethods := map[string][]string{}
-
-	if config.Middleware == nil {
-		config.Middleware = defaultMiddleware
-	}
 
 	for _, route := range config.Routes {
 		endpointMethods[route.path] = append(endpointMethods[route.path], route.method)
 		router.HttpRouter.Handle(
 			route.method,
 			route.path,
-			config.Middleware(router.handle(route.handler)),
+			router.middleware(router.handle(route.handler)),
 		)
 	}
 
@@ -66,7 +78,7 @@ func (router *Router) BuildRoutes(config Config) {
 		router.HttpRouter.Handle(
 			route.method,
 			route.path,
-			config.Middleware(router.handleWithAuthentication(route.handler)),
+			router.middleware(router.handleWithAuthentication(route.handler)),
 		)
 	}
 
@@ -75,7 +87,7 @@ func (router *Router) BuildRoutes(config Config) {
 		router.HttpRouter.Handle(
 			route.method,
 			route.path,
-			config.Middleware(router.handleWithAuthorization(
+			router.middleware(router.handleWithAuthorization(
 				route.handler,
 				route.service,
 				route.capability,
