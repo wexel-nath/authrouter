@@ -47,11 +47,11 @@ func New(authenticator Authenticator, logger Logger) *Router {
 }
 
 type Route struct {
-	method     string
-	path       string
-	handler    Handler
-	service    string
-	capability string
+	Method     string
+	Path       string
+	Handler    Handler
+	Service    string
+	Capability string
 }
 
 type Config struct {
@@ -65,32 +65,32 @@ func (router *Router) BuildRoutes(config Config) {
 	endpointMethods := map[string][]string{}
 
 	for _, route := range config.Routes {
-		endpointMethods[route.path] = append(endpointMethods[route.path], route.method)
+		endpointMethods[route.Path] = append(endpointMethods[route.Path], route.Method)
 		router.HttpRouter.Handle(
-			route.method,
-			route.path,
-			router.middleware(router.handle(route.handler)),
+			route.Method,
+			route.Path,
+			router.middleware(router.handle(route.Handler)),
 		)
 	}
 
 	for _, route := range config.AuthenticatedRoutes {
-		endpointMethods[route.path] = append(endpointMethods[route.path], route.method)
+		endpointMethods[route.Path] = append(endpointMethods[route.Path], route.Method)
 		router.HttpRouter.Handle(
-			route.method,
-			route.path,
-			router.middleware(router.handleWithAuthentication(route.handler)),
+			route.Method,
+			route.Path,
+			router.middleware(router.handleWithAuthentication(route.Handler)),
 		)
 	}
 
 	for _, route := range config.AuthorizedRoutes {
-		endpointMethods[route.path] = append(endpointMethods[route.path], route.method)
+		endpointMethods[route.Path] = append(endpointMethods[route.Path], route.Method)
 		router.HttpRouter.Handle(
-			route.method,
-			route.path,
+			route.Method,
+			route.Path,
 			router.middleware(router.handleWithAuthorization(
-				route.handler,
-				route.service,
-				route.capability,
+				route.Handler,
+				route.Service,
+				route.Capability,
 			)),
 		)
 	}
