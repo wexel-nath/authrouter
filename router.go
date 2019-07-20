@@ -16,6 +16,13 @@ type Router struct {
 	Authenticator Authenticator
 }
 
+func NewRouter(authenticator Authenticator) *Router {
+	return &Router{
+		HttpRouter:    httprouter.New(),
+		Authenticator: authenticator,
+	}
+}
+
 type Handler func(r *http.Request) (data interface{}, meta interface{}, status int)
 
 type HandlerWithUser func(
