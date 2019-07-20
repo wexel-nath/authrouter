@@ -1,7 +1,9 @@
 package authrouter
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -16,75 +18,85 @@ type Router struct {
 	Authenticator Authenticator
 }
 
-func NewRouter(authenticator Authenticator) *Router {
+func New(authenticator Authenticator) *Router {
 	return &Router{
 		HttpRouter:    httprouter.New(),
 		Authenticator: authenticator,
 	}
 }
 
-type Handler func(r *http.Request) (data interface{}, meta interface{}, status int)
-
-type HandlerWithUser func(
-	r *http.Request,
-	user interface{},
-) (data interface{}, meta interface{}, status int)
-
-func (router *Router) Handle(method string, path string, handler Handler) {
-	router.HttpRouter.Handle(method, path, router.handle(handler))
+type Route struct {
+	method     string
+	path       string
+	handler    Handler
+	service    string
+	capability string
 }
 
-func (router *Router) handle(handler Handler) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		data, meta, status := handler(r)
-		jsonResponse(w, data, meta, status)
+type Config struct {
+	Routes              []Route
+	AuthenticatedRoutes []Route
+	AuthorizedRoutes    []Route
+	EnableCors          bool
+	Middleware          func(next httprouter.Handle) httprouter.Handle
+}
+
+func defaultMiddleware(next httprouter.Handle) httprouter.Handle {
+	return next
+}
+
+func (router *Router) BuildRoutes(config Config) {
+	endpointMethods := map[string][]string{}
+
+	if config.Middleware == nil {
+		config.Middleware = defaultMiddleware
+	}
+
+	for _, route := range config.Routes {
+		endpointMethods[route.path] = append(endpointMethods[route.path], route.method)
+		router.HttpRouter.Handle(
+			route.method,
+			route.path,
+			config.Middleware(router.handle(route.handler)),
+		)
+	}
+
+	for _, route := range config.AuthenticatedRoutes {
+		endpointMethods[route.path] = append(endpointMethods[route.path], route.method)
+		router.HttpRouter.Handle(
+			route.method,
+			route.path,
+			config.Middleware(router.handleWithAuthentication(route.handler)),
+		)
+	}
+
+	for _, route := range config.AuthorizedRoutes {
+		endpointMethods[route.path] = append(endpointMethods[route.path], route.method)
+		router.HttpRouter.Handle(
+			route.method,
+			route.path,
+			config.Middleware(router.handleWithAuthorization(
+				route.handler,
+				route.service,
+				route.capability,
+			)),
+		)
+	}
+
+	if config.EnableCors {
+		for path, methods := range endpointMethods {
+			router.HttpRouter.OPTIONS(path, constructOptions(methods))
+		}
 	}
 }
 
-func (router *Router) HandleWithAuthentication(method string, path string, handler HandlerWithUser) {
-	router.HttpRouter.Handle(method, path, router.handleWithAuthentication(handler))
-}
-
-func (router *Router) handleWithAuthentication(handler HandlerWithUser) httprouter.Handle {
+func constructOptions(methods []string) func(http.ResponseWriter, *http.Request, httprouter.Params) {
+	methodCsv := strings.Join(append(methods, http.MethodOptions), ",")
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		user, err := router.Authenticator.Authenticate(r)
-		if err != nil {
-			notAuthenticatedResponse(w, err)
-			return
-		}
-
-		data, meta, status := handler(r, user)
-		jsonResponse(w, data, meta, status)
-	}
-}
-
-func (router *Router) HandleWithAuthorization(
-	method string,
-	path string,
-	handler HandlerWithUser,
-	service string,
-	capability string,
-) {
-	router.HttpRouter.Handle(
-		method,
-		path,
-		router.handleWithAuthorization(handler, service, capability),
-	)
-}
-
-func (router *Router) handleWithAuthorization(
-	handler HandlerWithUser,
-	service string,
-	capability string,
-) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		user, err := router.Authenticator.Authorize(r, service, capability)
-		if err != nil {
-			notAuthenticatedResponse(w, err)
-			return
-		}
-
-		data, meta, status := handler(r, user)
-		jsonResponse(w, data, meta, status)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", methodCsv)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, "{}")
 	}
 }
