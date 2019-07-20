@@ -54,6 +54,10 @@ func New(authenticator Authenticator, logger Logger, config Config) *Router {
 	return router
 }
 
+func (router *Router) GetHttpRouter() *httprouter.Router {
+	return router.httpRouter
+}
+
 type Route struct {
 	Method     string
 	Path       string
