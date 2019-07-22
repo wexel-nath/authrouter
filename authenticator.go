@@ -79,13 +79,13 @@ func (auth *Authenticator) authorize(
 		return user, err
 	}
 
-	servicePermissions, ok := user.Permissions[service]
+	servicePermissions, ok := user.Permissions[strings.ToLower(service)]
 	if service != "" && !ok {
 		return user, ErrNotAuthorized
 	}
 
 	if capability != "" {
-		allPermissions, ok := user.Permissions["ALL"]
+		allPermissions, ok := user.Permissions["all"]
 		if !ok {
 			allPermissions = []string{}
 		}
